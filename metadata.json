@@ -1,0 +1,6 @@
+{
+  "name": "ECOVIS HRMS & Role Hierarchy Visualizer",
+  "description": "Comprehensive HRMS platform featuring employee management, project tracking, tasks, and an interactive RBAC role and permission organizational hierarchy mind-map.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

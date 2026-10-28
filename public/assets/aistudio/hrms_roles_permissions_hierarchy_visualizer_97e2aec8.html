@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HRMS Role & Permission Hierarchy Mind-Map</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- D3.js for interactive Tree / Mind Map Visualization -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f6ff',
+                            100: '#e0edff',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            900: '#1e3a8a',
+                        },
+                        darkbg: '#0f172a',
+                        darkcard: '#1e293b',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* SVG Diagram & Custom Scrollbars */
+        .node circle, .node rect {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .node text {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            user-select: none;
+        }
+        .link {
+            fill: none;
+            stroke-linecap: round;
+            transition: all 0.4s ease;
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+        }
+        .dark ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.4);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(100, 116, 139, 0.7);
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+        .dark .glass-panel {
+            background: rgba(30, 41, 59, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(51, 65, 85, 0.8);
+        }
+        /* Node Pulsing effect for matches */
+        @keyframes nodePulse {
+            0% { r: 12px; stroke-width: 2px; }
+            50% { r: 18px; stroke-width: 6px; }
+            100% { r: 12px; stroke-width: 2px; }
+        }
+        .highlighted-node circle {
+            animation: nodePulse 1.5s infinite;
+            stroke: #f59e0b !important;
+        }
+    </style>
+</head>
+<body class="h-full bg-slate-50 dark:bg-darkbg text-slate-800 dark:text-slate-100 font-sans transition-colors duration-300 overflow-hidden flex flex-col">
+
+    <!-- Top Navigation Header -->
+    <header class="h-16 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-6 flex items-center justify-between z-20 shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
+                <i class="fa-solid font-bold text-lg fa-sitemap"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-tight tracking-tight text-slate-900 dark:text-white">HRMS Tenant RBAC Visualizer</h1>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Interactive Role Hierarchy, Module Scopes & Permission Drill-down</p>
+            </div>
+        </div>
+
+        <!-- Controls / Search / View Toggle -->
+        <div class="flex items-center space-x-3">
+            <!-- Search Bar -->
+            <div class="relative w-64 md:w-80">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                <input type="text" id="searchInput" placeholder="Search Role, Module or Permission..." 
+                       class="w-full pl-9 pr-8 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100/70 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 dark:text-slate-200 transition">
+                <button id="clearSearch" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- View Switcher Tabs -->
+            <div class="bg-slate-200 dark:bg-slate-800 p-1 rounded-lg flex space-x-1 text-xs">
+                <button id="viewMindmapBtn" class="px-3 py-1.5 rounded-md font-medium transition bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm flex items-center space-x-1">
+                    <i class="fa-solid fa-diagram-project"></i>
+                    <span class="hidden sm:inline">Mind Map</span>
+                </button>
+                <button id="viewMatrixBtn" class="px-3 py-1.5 rounded-md font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition flex items-center space-x-1">
+                    <i class="fa-solid fa-table-cells"></i>
+                    <span class="hidden sm:inline">Role Comparison Matrix</span>
+                </button>
+            </div>
+
+            <!-- Theme Toggle -->
+            <button id="themeToggle" class="w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+                <i class="fa-solid fa-moon dark:hidden"></i>
+                <i class="fa-solid fa-sun hidden dark:block text-amber-400"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 flex relative overflow-hidden">
+        
+        <!-- MIND MAP CANVAS VIEW -->
+        <div id="mindmapView" class="flex-1 relative h-full w-full bg-slate-100/50 dark:bg-slate-950/50">
+            <!-- Canvas Toolbar Controls -->
+            <div class="absolute top-4 left-4 z-10 glass-panel rounded-xl p-2 shadow-lg flex flex-col space-y-1 text-slate-700 dark:text-slate-300">
+                <button id="btnZoomIn" title="Zoom In" class="w-8 h-8 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition">
+                    <i class="fa-solid fa-plus text-xs"></i>
+                </button>
+                <button id="btnZoomOut" title="Zoom Out" class="w-8 h-8 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition">
+                    <i class="fa-solid fa-minus text-xs"></i>
+                </button>
+                <button id="btnReset" title="Reset View" class="w-8 h-8 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition">
+                    <i class="fa-solid fa-arrows-to-dot text-xs"></i>
+                </button>
+                <hr class="border-slate-200 dark:border-slate-700 my-1">
+                <button id="btnExpandAll" title="Expand All Nodes" class="w-8 h-8 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition">
+                    <i class="fa-solid fa-expand text-xs"></i>
+                </button>
+                <button id="btnCollapseAll" title="Collapse All Nodes" class="w-8 h-8 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition">
+                    <i class="fa-solid fa-compress text-xs"></i>
+                </button>
+            </div>
+
+            <!-- Scope Legend Overlay -->
+            <div class="absolute bottom-4 left-4 z-10 glass-panel rounded-xl p-3 shadow-lg hidden sm:block">
+                <div class="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-2">Scope & Role Hierarchy Levels</div>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-3 h-3 rounded-full bg-purple-600 inline-block"></span>
+                        <span>Tenant / Platform Wide</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="w-3 h-3 rounded-full bg-blue-600 inline-block"></span>
+                        <span>Legal Entity Scope</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="w-3 h-3 rounded-full bg-teal-500 inline-block"></span>
+                        <span>Department / Team Scope</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span>
+                        <span>Self / Employee Baseline</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Interactive SVG Container -->
+            <svg id="treeSvg" class="w-full h-full cursor-grab active:cursor-grabbing"></svg>
+        </div>
+
+        <!-- MATRIX COMPARISON VIEW (Hidden by default) -->
+        <div id="matrixView" class="hidden flex-1 h-full w-full overflow-auto p-6 bg-slate-50 dark:bg-slate-900">
+            <div class="max-w-7xl mx-auto space-y-6">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-900 dark:text-white">Role Permission Comparison Matrix</h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Cross-compare roles to inspect capabilities, bounds, and operational boundaries.</p>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <label class="text-xs font-semibold text-slate-600 dark:text-slate-300">Filter Module:</label>
+                        <select id="matrixModuleFilter" class="text-xs px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="ALL">All Modules</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Matrix Table -->
+                <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs border-collapse" id="matrixTable">
+                            <thead>
+                                <tr class="bg-slate-100/80 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold">
+                                    <th class="p-4 sticky left-0 bg-slate-100 dark:bg-slate-900 z-10 w-64">Module / Capability</th>
+                                    <th class="p-4 text-center min-w-[100px] bg-purple-500/10 text-purple-700 dark:text-purple-300">Super Admin</th>
+                                    <th class="p-4 text-center min-w-[100px]">Admin</th>
+                                    <th class="p-4 text-center min-w-[100px] bg-blue-500/10 text-blue-700 dark:text-blue-300">HR</th>
+                                    <th class="p-4 text-center min-w-[100px]">Payroll Admin</th>
+                                    <th class="p-4 text-center min-w-[100px]">Finance</th>
+                                    <th class="p-4 text-center min-w-[100px] bg-teal-500/10 text-teal-700 dark:text-teal-300">Manager</th>
+                                    <th class="p-4 text-center min-w-[100px]">Project Manager</th>
+                                    <th class="p-4 text-center min-w-[100px]">Recruiter</th>
+                                    <th class="p-4 text-center min-w-[100px] bg-amber-500/10 text-amber-700 dark:text-amber-300">Employee</th>
+                                    <th class="p-4 text-center min-w-[100px]">Auditor</th>
+                                </tr>
+                            </thead>
+                            <tbody id="matrixTableBody" class="divide-y divide-slate-200 dark:divide-slate-700/60">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PERMISSION DETAILS SIDE DRAWER -->
+        <aside id="detailsDrawer" class="w-96 glass-panel border-l border-slate-200 dark:border-slate-800 h-full flex flex-col z-20 transform translate-x-full transition-transform duration-300 absolute right-0 top-0 shadow-2xl">
+            <!-- Drawer Header -->
+            <div class="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+                <div class="flex items-center space-x-2">
+                    <span id="drawerBadge" class="w-3 h-3 rounded-full bg-blue-500"></span>
+                    <h3 id="drawerTitle" class="font-bold text-base text-slate-900 dark:text-white truncate">Permission Details</h3>
+                </div>
+                <button id="closeDrawer" class="w-8 h-8 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center text-slate-500 transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Drawer Body -->
+            <div class="flex-1 overflow-y-auto p-5 space-y-5 text-xs text-slate-600 dark:text-slate-300">
+                <!-- Permission Key & Code -->
+                <div class="bg-slate-100 dark:bg-slate-900/80 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <div class="text-[10px] uppercase font-bold text-slate-400 mb-1">Permission Code / Identifier</div>
+                    <code id="drawerKey" class="text-blue-600 dark:text-blue-400 font-mono text-xs break-all font-semibold">hrms:module:action</code>
+                </div>
+
+                <!-- Scope Constraints -->
+                <div>
+                    <div class="text-[10px] uppercase font-bold text-slate-400 mb-1.5">Scope Enforcement</div>
+                    <div id="drawerScope" class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-medium">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        <span>Legal Entity Scope</span>
+                    </div>
+                </div>
+
+                <!-- Simple Meaning Explanation -->
+                <div>
+                    <div class="text-[10px] uppercase font-bold text-slate-400 mb-1">What it Means in Simple Terms</div>
+                    <p id="drawerMeaning" class="leading-relaxed text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+                        Select a node in the tree to inspect its permission constraints, workflow rules, and security boundaries.
+                    </p>
+                </div>
+
+                <!-- Who Holds It -->
+                <div>
+                    <div class="text-[10px] uppercase font-bold text-slate-400 mb-1.5">Roles Authorized to Perform This</div>
+                    <div id="drawerRoles" class="flex flex-wrap gap-1.5">
+                        <span class="px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px]">Super Admin</span>
+                    </div>
+                </div>
+
+                <!-- Workflow Rules & Guardrails -->
+                <div class="border-t border-slate-200 dark:border-slate-800 pt-4">
+                    <div class="text-[10px] uppercase font-bold text-slate-400 mb-2 flex items-center justify-between">
+                        <span>Workflow & Safety Rules</span>
+                        <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+                    </div>
+                    <ul id="drawerRules" class="space-y-2 list-disc list-inside text-slate-600 dark:text-slate-300">
+                        <li>Self-approval is explicitly blocked for this action.</li>
+                    </ul>
+                </div>
+
+                <!-- Technical / Audit Details -->
+                <div class="bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl">
+                    <div class="font-bold text-amber-700 dark:text-amber-400 text-[11px] mb-1 flex items-center space-x-1">
+                        <i class="fa-solid fa-circle-info"></i>
+                        <span>Audit Trail Note</span>
+                    </div>
+                    <p id="drawerAudit" class="text-[11px] text-amber-800 dark:text-amber-300 leading-normal">
+                        All operations executed under this key generate an immutable entry in the Tenant Audit Log with full IP and user tracking.
+                    </p>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- JavaScript Data Logic & D3 Engine -->
+    <script>
+        // --- 1. HRMS RBAC HIERARCHICAL DATA TREE ---
+        const hrmsHierarchyData = {
+            id: "root",
+            name: "Tenant System Root",
+            type: "root",
+            scope: "Tenant-Wide",
+            color: "#8b5cf6", // purple
+            children: [
+                {
+                    id: "super_admin",
+                    name: "Super Admin",
+                    type: "role",
+                    scope: "Tenant-Wide (Break-Glass)",
+                    color: "#a855f7",
+                    description: "Platform-level administrator with complete break-glass access to every module and settings.",
+                    children: [
+                        {
+                            id: "sa_config",
+                            name: "Platform Config & Tenant Setup",
+                            type: "module",
+                            children: [
+                                { id: "sa_cfg_1", name: "Notification Templates Authoring", key: "cfg:notification:write", type: "permission", meaning: "Author text and triggers for system-wide notifications.", scope: "Tenant-wide", roles: ["Super Admin"], rules: ["Super Admin exclusive feature."] },
+                                { id: "sa_cfg_2", name: "Tenant System Settings", key: "cfg:system:manage", type: "permission", meaning: "Configure release modes, global OT multipliers, and system flags.", scope: "Tenant-wide", roles: ["Super Admin"], rules: ["Changes take effect tenant-wide immediately."] }
+                            ]
+                        },
+                        {
+                            id: "sa_roles",
+                            name: "Users & Custom Roles",
+                            type: "module",
+                            children: [
+                                { id: "sa_role_1", name: "Custom Role Builder", key: "role:custom:build", type: "permission", meaning: "Build tailored permission bundles when no baseline role fits.", scope: "Tenant-wide", roles: ["Super Admin"], rules: ["Allows creating Expense Approver role."] }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: "admin",
+                    name: "Tenant Admin",
+                    type: "role",
+                    scope: "Legal Entity Scope",
+                    color: "#3b82f6",
+                    description: "Org-structure and statutory registration manager.",
+                    children: [
+                        {
+                            id: "adm_org",
+                            name: "Organization Architecture",
+                            type: "module",
+                            children: [
+                                { id: "adm_org_1", name: "Legal Entity CRUD", key: "org:legal_entity:manage", type: "permission", meaning: "Create and modify legal company entities.", scope: "Legal Entity", roles: ["Super Admin", "Admin"], rules: ["Prerequisite for all employee master records."] },
+                                { id: "adm_org_2", name: "Cost Center & Org Units", key: "org:unit:manage", type: "permission", meaning: "Build departments, branches, and cost centers.", scope: "Legal Entity", roles: ["Super Admin", "Admin"], rules: ["Cost Centers route expense approvals."] }
+                            ]
+                        },
+                        {
+                            id: "adm_statutory",
+                            name: "Statutory Setup",
+                            type: "module",
+                            children: [
+                                { id: "adm_stat_1", name: "Statutory Rule Versioning", key: "statutory:rule:manage", type: "permission", meaning: "Configure PF, ESIC, PT, and TDS parameters.", scope: "Legal Entity", roles: ["Super Admin", "Admin"], rules: ["Approved statutory rules feed payroll calculation."] }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: "hr",
+                    name: "HR Manager",
+                    type: "role",
+                    scope: "Legal Entity Scope",
+                    color: "#06b6d4",
+                    description: "Broadest operational role managing full employee lifecycle, compensation, and leave.",
+                    children: [
+                        {
+                            id: "hr_emp",
+                            name: "Employee Lifecycle & Onboarding",
+                            type: "module",
+                            children: [
+                                { id: "hr_emp_1", name: "New Hire Onboarding", key: "employee:onboard:execute", type: "permission", meaning: "Create Employee Master records via manual form, bulk, or offer conversion.", scope: "Legal Entity", roles: ["Super Admin", "HR"], rules: ["Sole entrance into the Employee Master."] },
+                                { id: "hr_emp_2", name: "Statutory ID Unmask", key: "employee:id:reveal", type: "permission", meaning: "Reveal masked PAN, UAN, and Bank numbers.", scope: "Legal Entity", roles: ["Super Admin", "HR", "Payroll Admin"], rules: ["Audited action logged with timestamp & user IP."] }
+                            ]
+                        },
+                        {
+                            id: "hr_comp",
+                            name: "Compensation Management",
+                            type: "module",
+                            children: [
+                                { id: "hr_comp_1", name: "Submit Compensation Revision", key: "comp:revision:submit", type: "permission", meaning: "Propose salary component revisions for employees.", scope: "Legal Entity", roles: ["Super Admin", "HR"], rules: ["Must be approved to be used by payroll."] },
+                                { id: "hr_comp_2", name: "Approve Compensation Revision", key: "comp:revision:approve", type: "permission", meaning: "Approve proposed salary structure revisions.", scope: "Legal Entity", roles: ["Super Admin", "HR", "Payroll Admin"], rules: ["Supersedes existing active pay structure."] }
+                            ]
+                        },
+                        {
+                            id: "hr_payroll_signoff",
+                            name: "Payroll Sign-Off",
+                            type: "module",
+                            children: [
+                                { id: "hr_pay_sign", name: "Approve Payroll Run", key: "payroll:run:approve", type: "permission", meaning: "Sign off on calculated payroll runs.", scope: "Legal Entity", roles: ["Super Admin", "HR", "Payroll Admin"], rules: ["HR can approve runs, but CANNOT execute/create runs."] }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: "payroll_admin",
+                    name: "Payroll Administrator",
+                    type: "role",
+                    scope: "Legal Entity Scope",
+                    color: "#10b981",
+                    description: "Dedicated execution role for monthly payroll calculations and payslips.",
+                    children: [
+                        {
+                            id: "pay_exec",
+                            name: "Payroll Processing Engine",
+                            type: "module",
+                            children: [
+                                { id: "pay_exec_1", name: "Create & Compute Payroll Run", key: "payroll:run:create", type: "permission", meaning: "Initiate and execute monthly payroll computations.", scope: "Legal Entity", roles: ["Super Admin", "Payroll Admin"], rules: ["HR role cannot create runs."] },
+                                { id: "pay_exec_2", name: "Generate & Release Payslips", key: "payroll:payslip:release", type: "permission", meaning: "Produce employee payslips and publish them.", scope: "Legal Entity", roles: ["Super Admin", "Payroll Admin"], rules: ["Requires HR sign-off if gated."] }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: "finance",
+                    name: "Accountant / Finance",
+                    type: "role",
+                    scope: "Legal Entity Scope",
+                    color: "#84cc16",
+                    description: "Disbursement confirmation, bank files, Form 16, and expense reimbursement processing.",
+                    children: [
+                        {
+                            id: "fin_disburse",
+                            name: "Disbursement & Accounting",
+                            type: "module",
+                            children: [
+                                { id: "fin_dis_1", name: "Mark Payroll as Paid", key: "payroll:disburse:mark_paid", type: "permission", meaning: "Confirm bank disbursement status for payroll.", scope: "Legal Entity", roles: ["Super Admin", "Payroll Admin", "Finance"], rules: ["Cannot approve payroll runs."] },
+                                { id: "fin_dis_2", name: "Form 16 Tax File Generation", key: "tax:form16:generate", type: "permission", meaning: "Generate year-end Form 16 certificates.", scope: "Legal Entity", roles: ["Super Admin", "Finance", "Payroll Admin"], rules: ["Requires all year runs approved."] }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: "manager",
+                    name: "People Manager",
+                    type: "role",
+                    scope: "Department / Direct Reports",
+                    color: "#14b8a6",
+                    description: "Line manager overseeing team attendance, leave approvals, and timesheets.",
+                    children: [
+                        {
+                            id: "mgr_approvals",
+                            name: "Team Approvals Queue",
+                            type: "module",
+                            children: [
+                                { id: "mgr_app_1", name: "Approve Team Leave", key: "leave:request:approve", type: "permission", meaning: "Approve/Reject time off for direct reports.", scope: "Direct Reports", roles: ["Super Admin", "HR", "Manager"], rules: ["Self-approval blocked. Debits balance on approval."] },
+                                { id: "mgr_app_2", name: "Attendance Regularization Approve", key: "attendance:regularize:approve", type: "permission", meaning: "Approve punch correction requests.", scope: "Direct Reports", roles: ["Super Admin", "HR", "Manager"], rules: ["Self-approval blocked outright."] },
+                                { id: "mgr_app_3", name: "Edit Team Timesheet", key: "timesheet:entry:edit", type: "permission", meaning: "Modify team member timesheet records.", scope: "Direct Reports", roles: ["Manager"], rules: ["Editing an Approved entry forces status back to Submitted for re-approval."] }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: "project_manager",
+                    name: "Project Manager",
+                    type: "role",
+                    scope: "Assigned Project Scope",
+                    color: "#0284c7",
+                    description: "Scope minted per assigned project to manage tasks and approve project timesheets.",
+                    children: [
+                        {
+                            id: "pm_workspace",
+                            name: "Project & Task Management",
+                            type: "module",
+                            children: [
+                                { id: "pm_ws_1", name: "Approve Project Timesheet", key: "timesheet:project:approve", type: "permission", meaning: "Approve hours logged against assigned project.", scope: "Assigned Project", roles: ["Super Admin", "HR", "Project Manager"], rules: ["Feeds project cost calculation."] },
+                                { id: "pm_ws_2", name: "Approve / Reject Task", key: "task:review:approve", type: "permission", meaning: "Mark task completed or request rework.", scope: "Assigned Project", roles: ["Super Admin", "Project Manager"], rules: ["Assignee self-approval is restricted on UI."] }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: "employee",
+                    name: "Employee Baseline",
+                    type: "role",
+                    scope: "Self Scope Only",
+                    color: "#f59e0b",
+                    description: "Universal baseline access granted to every active login for self-service.",
+                    children: [
+                        {
+                            id: "emp_self",
+                            name: "My Workspace Self-Service",
+                            type: "module",
+                            children: [
+                                { id: "emp_sf_1", name: "Punch Attendance", key: "attendance:punch:self", type: "permission", meaning: "Record daily clock-in/out timestamps.", scope: "Self", roles: ["Employee (All)"], rules: ["Geofenced if enabled."] },
+                                { id: "emp_sf_2", name: "Apply Leave", key: "leave:request:create", type: "permission", meaning: "Submit personal leave requests.", scope: "Self", roles: ["Employee (All)"], rules: ["Triggers manager notification."] },
+                                { id: "emp_sf_3", name: "File Expense Claim", key: "expense:claim:create", type: "permission", meaning: "Submit reimbursement claims with receipts.", scope: "Self", roles: ["Employee (All)"], rules: ["Drafts are private to employee until submitted."] }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: "expense_approver",
+                    name: "Expense Approver (Custom)",
+                    type: "role",
+                    scope: "Cost Center Scope",
+                    color: "#ec4899",
+                    description: "Tenant-built custom role required to approve expense claims for a cost center.",
+                    children: [
+                        {
+                            id: "exp_app_mod",
+                            name: "Expense Inbox",
+                            type: "module",
+                            children: [
+                                { id: "exp_app_1", name: "Approve Expense Claim", key: "expense:claim:approve", type: "permission", meaning: "Approve claims for assigned cost center.", scope: "Cost Center", roles: ["Super Admin", "Expense Approver"], rules: ["Must be built manually by Tenant Admin."] }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: "auditor",
+                    name: "Auditor",
+                    type: "role",
+                    scope: "Tenant-Wide Audit Log",
+                    color: "#64748b",
+                    description: "Read-only compliance reviewer.",
+                    children: [
+                        {
+                            id: "aud_mod",
+                            name: "Audit & Compliance",
+                            type: "module",
+                            children: [
+                                { id: "aud_1", name: "View Audit Log", key: "audit:log:view", type: "permission", meaning: "Inspect system audit trails and export logs.", scope: "Tenant-wide", roles: ["Super Admin", "Auditor"], rules: ["Strictly read-only access."] }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+
+        // --- 2. MATRIX COMPARISON DATA TABLE GENERATION ---
+        const matrixData = [
+            { module: "Organization Setup", feature: "Legal Entity / Org Unit Management", key: "org:manage", permissions: { super_admin: "FULL", admin: "FULL", hr: "VIEW", payroll_admin: "NONE", finance: "NONE", manager: "NONE", project_manager: "NONE", recruiter: "NONE", employee: "NONE", auditor: "VIEW" } },
+            { module: "Users & Roles", feature: "Create Users & Custom Roles", key: "role:manage", permissions: { super_admin: "FULL", admin: "CREATE", hr: "NONE", payroll_admin: "NONE", finance: "NONE", manager: "NONE", project_manager: "NONE", recruiter: "NONE", employee: "NONE", auditor: "VIEW" } },
+            { module: "Employee Master", feature: "Employee Profile Lifecycle", key: "employee:profile", permissions: { super_admin: "FULL", admin: "NONE", hr: "FULL", payroll_admin: "VIEW", finance: "NONE", manager: "TEAM VIEW", project_manager: "NONE", recruiter: "NONE", employee: "SELF VIEW", auditor: "VIEW" } },
+            { module: "Attendance", feature: "Punch / Regularization Approval", key: "attendance:regularize", permissions: { super_admin: "FULL", admin: "NONE", hr: "FULL", payroll_admin: "NONE", finance: "NONE", manager: "APPROVE", project_manager: "NONE", recruiter: "NONE", employee: "PUNCH/FILE", auditor: "VIEW" } },
+            { module: "Leave", feature: "Leave Request & Approval", key: "leave:request", permissions: { super_admin: "FULL", admin: "NONE", hr: "FULL", payroll_admin: "NONE", finance: "NONE", manager: "APPROVE", project_manager: "NONE", recruiter: "NONE", employee: "APPLY", auditor: "VIEW" } },
+            { module: "Compensation", feature: "Salary Structure Revisions", key: "comp:revision", permissions: { super_admin: "FULL", admin: "NONE", hr: "SUBMIT/APPROVE", payroll_admin: "APPROVE", finance: "NONE", manager: "NONE", project_manager: "NONE", recruiter: "NONE", employee: "NONE", auditor: "VIEW" } },
+            { module: "Payroll Runs", feature: "Create & Execute Payroll Runs", key: "payroll:run:create", permissions: { super_admin: "FULL", admin: "NONE", hr: "SIGN-OFF ONLY", payroll_admin: "FULL", finance: "MARK PAID", manager: "NONE", project_manager: "NONE", recruiter: "NONE", employee: "PAYSLIP VIEW", auditor: "VIEW" } },
+            { module: "Timesheets", feature: "Log & Approve Timesheets", key: "timesheet:entry", permissions: { super_admin: "FULL", admin: "NONE", hr: "EXPORT", payroll_admin: "NONE", finance: "NONE", manager: "EDIT TEAM", project_manager: "APPROVE", recruiter: "NONE", employee: "LOG/SUBMIT", auditor: "VIEW" } },
+            { module: "Expense Claims", feature: "Submit & Approve Expenses", key: "expense:claim", permissions: { super_admin: "FULL", admin: "NONE", hr: "NONE", payroll_admin: "REIMBURSE", finance: "PROCESS", manager: "NONE", project_manager: "NONE", recruiter: "NONE", employee: "SUBMIT", auditor: "VIEW" } },
+            { module: "Recruitment", feature: "Requisition & Offer Lifecycle", key: "recruitment:offer", permissions: { super_admin: "FULL", admin: "NONE", hr: "VIEW", payroll_admin: "NONE", finance: "NONE", manager: "NONE", project_manager: "NONE", recruiter: "FULL", employee: "NONE", auditor: "VIEW" } }
+        ];
+
+        // --- 3. STATE & APP VARIABLES ---
+        let currentZoom = 1;
+        let svg, g, zoomHandler, rootNode;
+        let selectedNodeData = null;
+
+        // --- 4. D3 MIND-MAP CANVAS ENGINE ---
+        function initMindmap() {
+            const container = document.getElementById("mindmapView");
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            // Clear previous SVG
+            d3.select("#treeSvg").selectAll("*").remove();
+
+            svg = d3.select("#treeSvg")
+                .attr("width", width)
+                .attr("height", height);
+
+            g = svg.append("g").attr("id", "zoomGroup");
+
+            // Pan & Zoom Setup
+            zoomHandler = d3.zoom()
+                .scaleExtent([0.3, 2.5])
+                .on("zoom", (event) => {
+                    g.attr("transform", event.transform);
+                });
+
+            svg.call(zoomHandler);
+
+            // Initial position offset
+            svg.call(zoomHandler.transform, d3.zoomIdentity.translate(120, height / 2).scale(0.8));
+
+            rootNode = d3.hierarchy(hrmsHierarchyData, d => d.children);
+            rootNode.x0 = height / 2;
+            rootNode.y0 = 0;
+
+            // Initially collapse nodes deeper than depth 1 for cleaner view
+            if (rootNode.children) {
+                rootNode.children.forEach(collapseDeep);
+            }
+
+            updateTree(rootNode);
+        }
+
+        function collapseDeep(d) {
+            if (d.children) {
+                d._children = d.children;
+                d._children.forEach(collapseDeep);
+                d.children = null;
+            }
+        }
+
+        function expandAllNodes(d) {
+            if (d._children) {
+                d.children = d._children;
+                d._children = null;
+            }
+            if (d.children) {
+                d.children.forEach(expandAllNodes);
+            }
+        }
+
+        function collapseAllNodes(d) {
+            if (d.children && d.depth > 0) {
+                d._children = d.children;
+                d._children.forEach(collapseAllNodes);
+                d.children = null;
+            }
+        }
+
+        function updateTree(source) {
+            const treeLayout = d3.tree().nodeSize([36, 240]);
+            const treeData = treeLayout(rootNode);
+
+            const nodes = treeData.descendants();
+            const links = treeData.links();
+
+            // Normalize for fixed-depth spacing
+            nodes.forEach(d => { d.y = d.depth * 220; });
+
+            // --- NODES SELECTION ---
+            const node = g.selectAll('g.node')
+                .data(nodes, d => d.data.id || (d.data.id = ++nodeIdCounter));
+
+            // Enter new nodes at parent's previous position
+            const nodeEnter = node.enter().append('g')
+                .attr('class', 'node')
+                .attr('transform', d => `translate(${source.y0},${source.x0})`)
+                .on('click', (event, d) => {
+                    // Open drawer on permission click or toggle children on role/module click
+                    if (d.data.type === 'permission') {
+                        openDrawer(d.data);
+                    } else {
+                        if (d.children) {
+                            d._children = d.children;
+                            d.children = null;
+                        } else {
+                            d.children = d._children;
+                            d._children = null;
+                        }
+                        updateTree(d);
+                    }
+                });
+
+            // Node Circles / Rectangles
+            nodeEnter.append('circle')
+                .attr('r', 1e-6)
+                .attr('fill', d => d._children ? '#3b82f6' : (d.data.color || '#94a3b8'))
+                .attr('stroke', '#fff')
+                .attr('stroke-width', 2);
+
+            // Node Labels
+            nodeEnter.append('text')
+                .attr('dy', '.35em')
+                .attr('x', d => d.children || d._children ? -14 : 14)
+                .attr('text-anchor', d => d.children || d._children ? 'end' : 'start')
+                .text(d => d.data.name)
+                .attr('class', 'text-xs font-medium fill-slate-800 dark:fill-slate-200')
+                .style('fill-opacity', 1e-6);
+
+            // Node Scope Badge / Type
+            nodeEnter.append('text')
+                .attr('dy', '1.6em')
+                .attr('x', d => d.children || d._children ? -14 : 14)
+                .attr('text-anchor', d => d.children || d._children ? 'end' : 'start')
+                .text(d => d.data.scope ? `[${d.data.scope}]` : (d.data.key ? d.data.key : ''))
+                .attr('class', 'text-[9px] fill-slate-400 font-mono');
+
+            // --- UPDATE EXISTING NODES ---
+            const nodeUpdate = nodeEnter.merge(node);
+
+            nodeUpdate.transition().duration(400)
+                .attr('transform', d => `translate(${d.y},${d.x})`);
+
+            nodeUpdate.select('circle')
+                .attr('r', d => d.data.type === 'permission' ? 7 : (d.data.type === 'role' ? 11 : 9))
+                .attr('fill', d => d._children ? '#f59e0b' : (d.data.color || (d.data.type === 'permission' ? '#10b981' : '#64748b')))
+                .attr('stroke', d => d.data.type === 'role' ? '#3b82f6' : '#fff')
+                .attr('stroke-width', 2);
+
+            nodeUpdate.selectAll('text')
+                .style('fill-opacity', 1);
+
+            // --- EXIT NODES ---
+            const nodeExit = node.exit().transition().duration(400)
+                .attr('transform', d => `translate(${source.y},${source.x})`)
+                .remove();
+
+            nodeExit.select('circle').attr('r', 1e-6);
+            nodeExit.select('text').style('fill-opacity', 1e-6);
+
+            // --- LINKS / EDGES ---
+            const link = g.selectAll('path.link')
+                .data(links, d => d.target.data.id);
+
+            const linkEnter = link.enter().insert('path', 'g')
+                .attr('class', 'link stroke-slate-300 dark:stroke-slate-700')
+                .attr('stroke-width', 1.5)
+                .attr('d', d => {
+                    const o = { x: source.x0, y: source.y0 };
+                    return diagonal(o, o);
+                });
+
+            const linkUpdate = linkEnter.merge(link);
+
+            linkUpdate.transition().duration(400)
+                .attr('d', d => diagonal(d.source, d.target));
+
+            link.exit().transition().duration(400)
+                .attr('d', d => {
+                    const o = { x: source.x, y: source.y };
+                    return diagonal(o, o);
+                })
+                .remove();
+
+            // Store positions for smooth transitions
+            nodes.forEach(d => {
+                d.x0 = d.x;
+                d.y0 = d.y;
+            });
+        }
+
+        function diagonal(s, d) {
+            return `M ${s.y} ${s.x}
+                    C ${(s.y + d.y) / 2} ${s.x},
+                      ${(s.y + d.y) / 2} ${d.x},
+                      ${d.y} ${d.x}`;
+        }
+
+        let nodeIdCounter = 0;
+
+        // --- 5. DRAWER SLIDE-OVER ENGINE ---
+        function openDrawer(data) {
+            selectedNodeData = data;
+            const drawer = document.getElementById("detailsDrawer");
+            
+            document.getElementById("drawerTitle").innerText = data.name || "Permission Node";
+            document.getElementById("drawerKey").innerText = data.key || data.id || "N/A";
+            document.getElementById("drawerMeaning").innerText = data.meaning || data.description || "No specific detailed description provided for this node.";
+            document.getElementById("drawerScope").innerHTML = `<i class="fa-solid fa-shield-halved"></i> <span>${data.scope || "Tenant-wide"}</span>`;
+            
+            // Populate Roles
+            const rolesContainer = document.getElementById("drawerRoles");
+            rolesContainer.innerHTML = "";
+            if (data.roles && data.roles.length > 0) {
+                data.roles.forEach(r => {
+                    const badge = document.createElement("span");
+                    badge.className = "px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 font-semibold text-[11px]";
+                    badge.innerText = r;
+                    rolesContainer.appendChild(badge);
+                });
+            } else {
+                rolesContainer.innerHTML = `<span class="text-slate-400 italic">Inherited via parent role</span>`;
+            }
+
+            // Rules
+            const rulesContainer = document.getElementById("drawerRules");
+            rulesContainer.innerHTML = "";
+            if (data.rules && data.rules.length > 0) {
+                data.rules.forEach(rule => {
+                    const li = document.createElement("li");
+                    li.innerText = rule;
+                    rulesContainer.appendChild(li);
+                });
+            } else {
+                rulesContainer.innerHTML = `<li>Standard audit logging and access checks apply.</li>`;
+            }
+
+            drawer.classList.remove("translate-x-full");
+        }
+
+        function closeDrawer() {
+            document.getElementById("detailsDrawer").addClass = "translate-x-full";
+            document.getElementById("detailsDrawer").classList.add("translate-x-full");
+        }
+
+        // --- 6. ROLE MATRIX BUILDER ---
+        function renderMatrixTable(filterModule = "ALL") {
+            const tbody = document.getElementById("matrixTableBody");
+            tbody.innerHTML = "";
+
+            const filteredData = filterModule === "ALL" 
+                ? matrixData 
+                : matrixData.filter(item => item.module === filterModule);
+
+            filteredData.forEach(row => {
+                const tr = document.createElement("tr");
+                tr.className = "hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition";
+
+                let html = `
+                    <td class="p-4 font-semibold text-slate-800 dark:text-slate-200 sticky left-0 bg-white dark:bg-slate-800 z-10 border-r border-slate-200 dark:border-slate-700">
+                        <div>${row.feature}</div>
+                        <div class="text-[10px] text-slate-400 font-mono font-normal">${row.module} • ${row.key}</div>
+                    </td>
+                `;
+
+                const roleKeys = ["super_admin", "admin", "hr", "payroll_admin", "finance", "manager", "project_manager", "recruiter", "employee", "auditor"];
+                
+                roleKeys.forEach(rKey => {
+                    const val = row.permissions[rKey] || "NONE";
+                    let badgeClass = "bg-slate-100 dark:bg-slate-800 text-slate-500";
+
+                    if (val.includes("FULL") || val === "APPROVE" || val === "EXECUTE") {
+                        badgeClass = "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-bold";
+                    } else if (val.includes("SUBMIT") || val.includes("CREATE") || val.includes("APPLY") || val.includes("TEAM")) {
+                        badgeClass = "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold";
+                    } else if (val.includes("VIEW") || val.includes("REIMBURSE") || val.includes("PROCESS")) {
+                        badgeClass = "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300";
+                    } else if (val === "NONE") {
+                        badgeClass = "text-slate-300 dark:text-slate-700";
+                    }
+
+                    html += `<td class="p-3 text-center border-r border-slate-100 dark:border-slate-800/50"><span class="px-2 py-1 rounded text-[10px] inline-block ${badgeClass}">${val}</span></td>`;
+                });
+
+                tr.innerHTML = html;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // --- 7. SEARCH ENGINE ---
+        function handleSearch(query) {
+            if (!query || query.trim() === "") {
+                d3.selectAll('.node').classed('highlighted-node', false);
+                return;
+            }
+
+            const q = query.toLowerCase();
+
+            // Expand all nodes so matches are rendered
+            expandAllNodes(rootNode);
+            updateTree(rootNode);
+
+            // Highlight matches
+            d3.selectAll('.node').classed('highlighted-node', d => {
+                const nameMatch = d.data.name && d.data.name.toLowerCase().includes(q);
+                const keyMatch = d.data.key && d.data.key.toLowerCase().includes(q);
+                const roleMatch = d.data.roles && d.data.roles.some(r => r.toLowerCase().includes(q));
+                return nameMatch || keyMatch || roleMatch;
+            });
+        }
+
+        // --- 8. INITIALIZATION & EVENT LISTENERS ---
+        window.addEventListener('load', () => {
+            initMindmap();
+            renderMatrixTable();
+
+            // Populate Matrix Filter Dropdown
+            const filterSelect = document.getElementById("matrixModuleFilter");
+            const modules = [...new Set(matrixData.map(m => m.module))];
+            modules.forEach(mod => {
+                const opt = document.createElement("option");
+                opt.value = mod;
+                opt.innerText = mod;
+                filterSelect.appendChild(opt);
+            });
+
+            filterSelect.addEventListener("change", (e) => {
+                renderMatrixTable(e.target.value);
+            });
+
+            // View Switcher
+            const viewMindmapBtn = document.getElementById("viewMindmapBtn");
+            const viewMatrixBtn = document.getElementById("viewMatrixBtn");
+            const mindmapView = document.getElementById("mindmapView");
+            const matrixView = document.getElementById("matrixView");
+
+            viewMindmapBtn.addEventListener("click", () => {
+                mindmapView.classList.remove("hidden");
+                matrixView.classList.add("hidden");
+                viewMindmapBtn.classList.add("bg-white", "dark:bg-slate-700", "text-blue-600", "shadow-sm");
+                viewMatrixBtn.classList.remove("bg-white", "dark:bg-slate-700", "text-blue-600", "shadow-sm");
+            });
+
+            viewMatrixBtn.addEventListener("click", () => {
+                mindmapView.classList.add("hidden");
+                matrixView.classList.remove("hidden");
+                viewMatrixBtn.classList.add("bg-white", "dark:bg-slate-700", "text-blue-600", "shadow-sm");
+                viewMindmapBtn.classList.remove("bg-white", "dark:bg-slate-700", "text-blue-600", "shadow-sm");
+            });
+
+            // Canvas Zoom Toolbar
+            document.getElementById("btnZoomIn").addEventListener("click", () => {
+                svg.transition().duration(300).call(zoomHandler.scaleBy, 1.3);
+            });
+
+            document.getElementById("btnZoomOut").addEventListener("click", () => {
+                svg.transition().duration(300).call(zoomHandler.scaleBy, 0.7);
+            });
+
+            document.getElementById("btnReset").addEventListener("click", () => {
+                svg.transition().duration(400).call(
+                    zoomHandler.transform, 
+                    d3.zoomIdentity.translate(120, document.getElementById("mindmapView").clientHeight / 2).scale(0.8)
+                );
+            });
+
+            document.getElementById("btnExpandAll").addEventListener("click", () => {
+                expandAllNodes(rootNode);
+                updateTree(rootNode);
+            });
+
+            document.getElementById("btnCollapseAll").addEventListener("click", () => {
+                collapseAllNodes(rootNode);
+                updateTree(rootNode);
+            });
+
+            // Search Bar Input Events
+            const searchInput = document.getElementById("searchInput");
+            const clearSearchBtn = document.getElementById("clearSearch");
+
+            searchInput.addEventListener("input", (e) => {
+                const val = e.target.value;
+                if (val.length > 0) {
+                    clearSearchBtn.classList.remove("hidden");
+                } else {
+                    clearSearchBtn.classList.add("hidden");
+                }
+                handleSearch(val);
+            });
+
+            clearSearchBtn.addEventListener("click", () => {
+                searchInput.value = "";
+                clearSearchBtn.classList.add("hidden");
+                handleSearch("");
+            });
+
+            // Close Drawer
+            document.getElementById("closeDrawer").addEventListener("click", closeDrawer);
+
+            // Theme Toggle
+            const themeToggleBtn = document.getElementById("themeToggle");
+            themeToggleBtn.addEventListener("click", () => {
+                document.documentElement.classList.toggle("dark");
+            });
+
+            // Window Resize
+            window.addEventListener("resize", () => {
+                initMindmap();
+            });
+        });
+    </script>
+</body>
+</html>

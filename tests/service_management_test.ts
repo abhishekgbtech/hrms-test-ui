@@ -120,7 +120,7 @@ async function runTestSuite() {
 
   assert(!!engagement.id, 'Engagement created successfully');
   assert(engagement.collaborators.length === 2, 'Collaborators assigned');
-  const crossEntityCollab = engagement.collaborators.find(c => c.homeLegalEntityId !== engagement.servicingLegalEntityId);
+  const crossEntityCollab = engagement.collaborators.find((c: any) => c.homeLegalEntityId !== engagement.servicingLegalEntityId);
   assert(!!crossEntityCollab, 'Cross-legal-entity collaborator (New Delhi) successfully linked to Mumbai servicing entity');
 
   // Test 4: Bespoke Custom Client Tasks without Master Template Mutation

@@ -210,6 +210,9 @@ function AuthenticatedApp() {
 
   // Derive Current Page from URL
   const currentPage: Page = useMemo(() => {
+    if (location.pathname.startsWith('/services')) {
+      return 'Service Management';
+    }
     return ROUTE_TO_PAGE[location.pathname] || 'Dashboard';
   }, [location.pathname]);
 
@@ -338,7 +341,7 @@ function AuthenticatedApp() {
         <Route path="/folders" element={<Folders />} />
         <Route path="/tickets" element={<TicketGeneration />} />
         <Route path="/hierarchy" element={<OrgHierarchy />} />
-        <Route path="/services" element={<ServiceManagement />} />
+        <Route path="/services/*" element={<ServiceManagement />} />
         <Route path="/admin" element={<AdminPanel />} />
         <Route path="/seed" element={<SeedEmployees />} />
         <Route path="*" element={<Navigate to="/" replace />} />
